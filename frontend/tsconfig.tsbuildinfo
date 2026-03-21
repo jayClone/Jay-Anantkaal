@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/protectedroute.tsx","./src/context/authcontext.tsx","./src/lib/utils.ts","./src/pages/auth.tsx","./src/pages/dashboardpage.tsx","./src/services/api.ts","./src/services/auth.service.ts","./src/services/task.service.ts","./src/types/index.ts"],"version":"5.9.3"}

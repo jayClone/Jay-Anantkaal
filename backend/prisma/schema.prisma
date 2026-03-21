@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id           String       @id @default(uuid()) @db.Uuid
+  username     String       @unique
+  name         String
+  email        String       @unique
+  passwordHash String?      @map("password_hash")
+  avatarUrl    String?      @map("avatar_url")
+  provider     AuthProvider @default(LOCAL)
+  lastLoginAt  DateTime?    @map("last_login_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  tasks         Task[]
+  oauthAccounts OAuthAccount[]
+  guidances     TaskGuidance[]
+
+  @@index([createdAt])
+  @@map("users")
+}
+
+model OAuthAccount {
+  id                String       @id @default(uuid()) @db.Uuid
+  provider          AuthProvider
+  providerAccountId String       @map("provider_account_id")
+  accessToken       String?      @map("access_token")
+  userId            String       @map("user_id") @db.Uuid
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  dueDate     DateTime?    @map("due_date")
+  userId      String       @map("user_id") @db.Uuid
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  guidances   TaskGuidance[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("tasks")
+}
+
+model TaskGuidance {
+  id          String   @id @default(uuid()) @db.Uuid
+  summary     String
+  nextSteps   String[] @map("next_steps")
+  risks       String[]
+  generatedBy String   @map("generated_by")
+  taskId      String   @map("task_id") @db.Uuid
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id") @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([taskId])
+  @@index([userId, createdAt])
+  @@map("task_guidances")
+}
