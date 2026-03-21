@@ -24,8 +24,6 @@ JWT_SECRET="replace-this-in-real-use"
 JWT_EXPIRES_IN="7d"
 PORT=4000
 CLIENT_URL="http://localhost:3000"
-SUPABASE_URL="https://your-project-ref.supabase.co"
-SUPABASE_PUBLISHABLE_DEFAULT_KEY="sb_publishable_..."
 GOOGLE_CLIENT_ID=""
 GEMINI_API_KEY=""
 GEMINI_PRIMARY_MODEL="gemini-2.5-flash"
@@ -52,6 +50,7 @@ npm run dev
 - `POST /api/auth/login`
 - `POST /api/auth/oauth/google`
 - `GET /api/auth/me`
+- `POST /api/auth/change-password`
 
 ### Tasks
 

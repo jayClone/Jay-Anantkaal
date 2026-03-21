@@ -1,4 +1,3 @@
-import "dotenv/config";
 import app from "./index.js";
 import { prisma } from "./config/database.js";
 import { env } from "./config/env.js";

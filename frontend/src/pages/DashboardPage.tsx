@@ -201,13 +201,52 @@ export default function DashboardPage() {
 
   const openGuidance = async (task: Task) => {
     setGuidanceTask(task);
+    setErrorMessage("");
+
+    const existingGuidance = task.guidances?.[0] ?? null;
+
+    if (existingGuidance) {
+      setGuidance(existingGuidance);
+      setGuidanceLoading(false);
+      return;
+    }
+
     setGuidance(null);
     setGuidanceLoading(true);
-    setErrorMessage("");
 
     try {
       const nextGuidance = await taskService.generateGuidance(task.id);
       setGuidance(nextGuidance);
+      setTasks((currentTasks) =>
+        currentTasks.map((currentTask) =>
+          currentTask.id === task.id ? { ...currentTask, guidances: [nextGuidance] } : currentTask,
+        ),
+      );
+    } catch (error) {
+      setErrorMessage(extractErrorMessage(error));
+    } finally {
+      setGuidanceLoading(false);
+    }
+  };
+
+  const regenerateGuidance = async () => {
+    if (!guidanceTask) {
+      return;
+    }
+
+    setGuidanceLoading(true);
+    setErrorMessage("");
+
+    try {
+      const nextGuidance = await taskService.generateGuidance(guidanceTask.id);
+      setGuidance(nextGuidance);
+      setTasks((currentTasks) =>
+        currentTasks.map((currentTask) =>
+          currentTask.id === guidanceTask.id
+            ? { ...currentTask, guidances: [nextGuidance] }
+            : currentTask,
+        ),
+      );
     } catch (error) {
       setErrorMessage(extractErrorMessage(error));
     } finally {
@@ -299,7 +338,7 @@ export default function DashboardPage() {
 
       <main className="w-full px-5 py-6 sm:px-8 lg:px-10">
         <header className="glass-panel rounded-[2rem] px-6 py-5 shadow-lg shadow-primary/5">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.28em] text-on-surface-variant/55">
                 Task management system
@@ -321,13 +360,131 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <section className="mt-8 grid items-start gap-8 xl:grid-cols-[420px_minmax(0,1fr)]">
+        {errorMessage ? (
+          <div className="mt-6 rounded-[1.5rem] border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <section className="mt-8 grid items-start gap-8 2xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
             <div className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">
+                    Task board
+                  </p>
+                  <h2 className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-on-surface">
+                    Your active work
+                  </h2>
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {filterOptions.map((filter) => {
+                    const isActive = activeFilter === filter.value || (!activeFilter && !filter.value);
+                    return (
+                      <button
+                        key={filter.label}
+                        onClick={() => setActiveFilter(filter.value)}
+                        className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
+                          isActive
+                            ? "bg-primary text-white shadow-lg shadow-primary/20"
+                            : "bg-white text-on-surface-variant hover:text-primary"
+                        }`}
+                      >
+                        {filter.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="glass-panel rounded-[2rem] p-8 text-center text-sm text-on-surface-variant">
+                Loading your tasks...
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="glass-panel rounded-[2rem] p-10 text-center shadow-lg shadow-primary/5">
+                <p className="font-headline text-3xl font-extrabold tracking-tight text-on-surface">
+                  No tasks yet
+                </p>
+                <p className="mx-auto mt-3 max-w-lg text-sm leading-7 text-on-surface-variant">
+                  Create your first task from the workspace rail on the right. Once you add it, the board and AI assist will start to feel alive.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {tasks.map((task) => (
+                  <article
+                    key={task.id}
+                    className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
+                  >
+                    <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="min-w-0 space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${priorityToneMap[task.priority]}`}>
+                            {task.priority}
+                          </span>
+                          <span className="rounded-full bg-primary/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
+                            {statusLabelMap[task.status]}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h3 className="font-headline text-2xl font-extrabold tracking-tight text-on-surface">
+                            {task.title}
+                          </h3>
+                          <p className="mt-2 max-w-3xl text-sm leading-7 text-on-surface-variant">
+                            {task.description || "No description added yet."}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-4 text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant/75">
+                          <span>Due {formatDate(task.dueDate)}</span>
+                          <span>Created {formatDate(task.createdAt)}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 flex-wrap gap-3 xl:max-w-xs xl:justify-end">
+                        <button
+                          onClick={() => void openGuidance(task)}
+                          className="rounded-full border border-primary/15 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary"
+                        >
+                          AI Assist
+                        </button>
+                        <button
+                          onClick={() => advanceStatus(task)}
+                          className="rounded-full bg-primary px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-primary/20"
+                        >
+                          Move Status
+                        </button>
+                        <button
+                          onClick={() => startEdit(task)}
+                          className="rounded-full border border-primary/15 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => void handleDelete(task.id)}
+                          className="rounded-full border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-rose-700"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <aside className="space-y-6 2xl:sticky 2xl:top-6">
+            <section className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
               <div className="mb-6 flex items-center justify-between">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">
-                    Composer
+                    Workspace
                   </p>
                   <h2 className="mt-2 font-headline text-2xl font-extrabold tracking-tight">
                     {selectedTask ? "Edit task" : "Create task"}
@@ -358,7 +515,7 @@ export default function DashboardPage() {
                   onChange={updateForm("description")}
                 />
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-1">
                   <SelectField label="Status" value={form.status} onChange={updateForm("status")}>
                     <option value="TODO">To Do</option>
                     <option value="IN_PROGRESS">In Progress</option>
@@ -387,43 +544,15 @@ export default function DashboardPage() {
                   {submitting ? "Saving..." : selectedTask ? "Save Changes" : "Create Task"}
                 </button>
               </form>
-            </div>
+            </section>
 
-            <div className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">Filters</p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {filterOptions.map((filter) => {
-                  const isActive = activeFilter === filter.value || (!activeFilter && !filter.value);
-                  return (
-                    <button
-                      key={filter.label}
-                      onClick={() => setActiveFilter(filter.value)}
-                      className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] transition ${
-                        isActive
-                          ? "bg-primary text-white shadow-lg shadow-primary/20"
-                          : "bg-white text-on-surface-variant hover:text-primary"
-                      }`}
-                    >
-                      {filter.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {errorMessage ? (
-                <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {errorMessage}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
+            <section className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
               <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">Security</p>
               <h3 className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-on-surface">
-                Change password
+                Password settings
               </h3>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
-                If you signed up with Google and do not have a password yet, just set a new one here.
+                Create or update your password here without crowding the main task workflow.
               </p>
 
               <form className="mt-5 space-y-4" onSubmit={handleChangePassword}>
@@ -471,174 +600,100 @@ export default function DashboardPage() {
                   {passwordSubmitting ? "Updating..." : "Update Password"}
                 </button>
               </form>
-            </div>
-          </div>
-
-          <div className="space-y-5">
-            {loading ? (
-              <div className="glass-panel rounded-[2rem] p-8 text-center text-sm text-on-surface-variant">
-                Loading your tasks...
-              </div>
-            ) : tasks.length === 0 ? (
-              <div className="glass-panel rounded-[2rem] p-8 text-center">
-                <p className="font-headline text-2xl font-extrabold tracking-tight text-on-surface">
-                  No tasks yet
-                </p>
-                <p className="mt-3 text-sm text-on-surface-variant">
-                  Create your first task from the composer and it will appear here instantly.
-                </p>
-              </div>
-            ) : (
-              tasks.map((task) => (
-                <article
-                  key={task.id}
-                  className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/10"
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${priorityToneMap[task.priority]}`}>
-                          {task.priority}
-                        </span>
-                        <span className="rounded-full bg-primary/8 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-primary">
-                          {statusLabelMap[task.status]}
-                        </span>
-                      </div>
-
-                      <div>
-                        <h3 className="font-headline text-2xl font-extrabold tracking-tight text-on-surface">
-                          {task.title}
-                        </h3>
-                        <p className="mt-2 text-sm leading-7 text-on-surface-variant">
-                          {task.description || "No description added yet."}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap gap-4 text-xs font-semibold uppercase tracking-[0.16em] text-on-surface-variant/75">
-                        <span>Due {formatDate(task.dueDate)}</span>
-                        <span>Created {formatDate(task.createdAt)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-3 md:w-56 md:justify-end">
-                      <button
-                        onClick={() => void openGuidance(task)}
-                        className="rounded-full border border-primary/15 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary"
-                      >
-                        AI Assist
-                      </button>
-                      <button
-                        onClick={() => advanceStatus(task)}
-                        className="rounded-full bg-primary px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white shadow-lg shadow-primary/20"
-                      >
-                        Move Status
-                      </button>
-                      <button
-                        onClick={() => startEdit(task)}
-                        className="rounded-full border border-primary/15 bg-white px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-primary"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => void handleDelete(task.id)}
-                        className="rounded-full border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-rose-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))
-            )}
-
-            {guidanceTask ? (
-              <section className="glass-panel rounded-[2rem] p-6 shadow-lg shadow-primary/5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">
-                      AI Assist
-                    </p>
-                    <h3 className="mt-2 font-headline text-2xl font-extrabold tracking-tight text-on-surface">
-                      {guidanceTask.title}
-                    </h3>
-                    <p className="mt-2 text-sm text-on-surface-variant">
-                      Actionable next steps, risks, and a sharper execution plan for this task.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={closeGuidance}
-                    className="rounded-full border border-primary/15 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-primary"
-                  >
-                    Close
-                  </button>
-                </div>
-
-                {guidanceLoading ? (
-                  <div className="mt-6 rounded-[1.5rem] bg-white/80 p-5 text-sm text-on-surface-variant">
-                    Generating guidance...
-                  </div>
-                ) : guidance ? (
-                  <div className="mt-6 space-y-5">
-                    <div className="rounded-[1.5rem] bg-white/80 p-5">
-                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
-                        Summary
-                      </p>
-                      <p className="mt-3 text-sm leading-7 text-on-surface">{guidance.summary}</p>
-                    </div>
-
-                    <div className="grid gap-5 lg:grid-cols-2">
-                      <div className="rounded-[1.5rem] bg-white/80 p-5">
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
-                          Next Steps
-                        </p>
-                        <ul className="mt-3 space-y-3">
-                          {guidance.nextSteps.map((step, index) => (
-                            <li key={`${guidance.id}-step-${index}`} className="flex gap-3 text-sm leading-6 text-on-surface">
-                              <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
-                                {index + 1}
-                              </span>
-                              <span>{step}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="rounded-[1.5rem] bg-white/80 p-5">
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
-                          Risks
-                        </p>
-                        <ul className="mt-3 space-y-3">
-                          {guidance.risks.map((risk, index) => (
-                            <li key={`${guidance.id}-risk-${index}`} className="flex gap-3 text-sm leading-6 text-on-surface">
-                              <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700">
-                                !
-                              </span>
-                              <span>{risk}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.5rem] bg-white/80 p-5">
-                      <p className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/65">
-                        Generated by {guidance.generatedBy}
-                      </p>
-                      <button
-                        onClick={() => void openGuidance(guidanceTask)}
-                        className="rounded-full bg-gradient-to-r from-primary to-secondary px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white"
-                      >
-                        Regenerate
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
-          </div>
+            </section>
+          </aside>
         </section>
       </main>
+
+      {guidanceTask ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/25 backdrop-blur-sm">
+          <div className="h-full w-full max-w-2xl overflow-y-auto border-l border-white/50 bg-white/88 p-6 shadow-2xl shadow-slate-900/10 backdrop-blur-xl">
+            <div className="mx-auto max-w-3xl">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-on-surface-variant/55">
+                    AI Assist
+                  </p>
+                  <h3 className="mt-2 font-headline text-3xl font-extrabold tracking-tight text-on-surface">
+                    {guidanceTask.title}
+                  </h3>
+                  <p className="mt-3 max-w-xl text-sm leading-7 text-on-surface-variant">
+                    Actionable next steps, risks, and a sharper execution plan without cluttering your main board.
+                  </p>
+                </div>
+
+                <button
+                  onClick={closeGuidance}
+                  className="rounded-full border border-primary/15 bg-white px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-primary"
+                >
+                  Close
+                </button>
+              </div>
+
+              {guidanceLoading ? (
+                <div className="mt-8 rounded-[1.75rem] bg-white/80 p-6 text-sm text-on-surface-variant">
+                  Generating guidance...
+                </div>
+              ) : guidance ? (
+                <div className="mt-8 space-y-6">
+                  <div className="rounded-[1.75rem] bg-white/80 p-6 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
+                      Summary
+                    </p>
+                    <p className="mt-4 text-sm leading-7 text-on-surface">{guidance.summary}</p>
+                  </div>
+
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    <div className="rounded-[1.75rem] bg-white/80 p-6 shadow-sm">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
+                        Next Steps
+                      </p>
+                      <ul className="mt-4 space-y-4">
+                        {guidance.nextSteps.map((step, index) => (
+                          <li key={`${guidance.id}-step-${index}`} className="flex gap-3 text-sm leading-7 text-on-surface">
+                            <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
+                              {index + 1}
+                            </span>
+                            <span>{step}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="rounded-[1.75rem] bg-white/80 p-6 shadow-sm">
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant/55">
+                        Risks
+                      </p>
+                      <ul className="mt-4 space-y-4">
+                        {guidance.risks.map((risk, index) => (
+                          <li key={`${guidance.id}-risk-${index}`} className="flex gap-3 text-sm leading-7 text-on-surface">
+                            <span className="mt-1 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-rose-100 text-xs font-bold text-rose-700">
+                              !
+                            </span>
+                            <span>{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.75rem] bg-white/80 p-6 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-on-surface-variant/65">
+                      Generated by {guidance.generatedBy}
+                    </p>
+                    <button
+                      onClick={() => void regenerateGuidance()}
+                      className="rounded-full bg-gradient-to-r from-primary to-secondary px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-white"
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -23,6 +23,7 @@ export type Task = {
   userId: string;
   createdAt: string;
   updatedAt: string;
+  guidances?: TaskGuidance[];
 };
 
 export type CreateTaskInput = {
@@ -55,5 +56,4 @@ export type TaskGuidance = {
   risks: string[];
   generatedBy: string;
   createdAt: string;
-  updatedAt: string;
 };
