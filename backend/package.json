@@ -7,11 +7,12 @@
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
     "test:watch": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --watch",
     "dev": "npm.cmd run build && node dist/server.js",
-    "build": "tsc",
+    "build": "npm run prisma:generate && tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:push:accept": "prisma db push --accept-data-loss"
+    "db:push:accept": "prisma db push --accept-data-loss",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
