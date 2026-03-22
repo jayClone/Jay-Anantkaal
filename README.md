@@ -111,11 +111,28 @@ Before running the project, make sure you have:
 
 ## Environment Configuration
 
+Use the provided example files as the starting point:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+```
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+Copy-Item frontend/.env.example frontend/.env
+```
+
+Then replace the placeholder values with your real credentials and URLs.
+
 ## Backend Environment
 
-Create `backend/.env`:
+`backend/.env.example` includes the full backend environment surface. The final `backend/.env` should look like this:
 
 ```env
+NODE_ENV=development
 PORT=5000
 CLIENT_URL=http://localhost:3000
 
@@ -145,7 +162,7 @@ Notes:
 
 ## Frontend Environment
 
-Create `frontend/.env`:
+`frontend/.env.example` includes the frontend environment variables used by the app. The final `frontend/.env` should look like this:
 
 ```env
 VITE_GOOGLE_CLIENT_ID=your_google_client_id
@@ -275,6 +292,7 @@ Render environment notes:
 - `CLIENT_URL` should point to the Vercel frontend origin
 - `PORT` should be provided by Render and does not need to be hardcoded
 - Prisma Client is generated during install/build for clean deploy environments
+- Set `VITE_GOOGLE_CLIENT_ID` in Vercel, not `GOOGLE_CLIENT_ID`
 
 ## Build Commands
 
