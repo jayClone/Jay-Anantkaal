@@ -22,6 +22,8 @@ const initialState: FormState = {
   password: "",
 };
 
+const deployedBackendHealthUrl = "https://jay-anantkaal.onrender.com/health";
+
 const extractErrorMessage = (error: unknown) => {
   if (typeof error === "object" && error && "response" in error) {
     const response = (error as { response?: { data?: { message?: string } } }).response;
@@ -62,6 +64,27 @@ export default function AuthPage({ mode }: AuthPageProps) {
   if (!isLoading && isAuthenticated) {
     return <Navigate to="/" replace />;
   }
+
+  useEffect(() => {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void fetch(deployedBackendHealthUrl, {
+      method: "GET",
+      signal: controller.signal,
+      credentials: "omit",
+      cache: "no-store",
+    }).catch(() => {
+      // Warm-up should stay silent because auth still works even if the wake-up request fails.
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!googleClientId || !googleButtonRef.current) {
