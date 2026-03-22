@@ -10,12 +10,23 @@ const requiredEnv = (key: string, fallback?: string) => {
   return value;
 };
 
+const requireEnvInProduction = (key: string, fallback?: string) => {
+  if (process.env.NODE_ENV === "production") {
+    return requiredEnv(key);
+  }
+
+  return requiredEnv(key, fallback);
+};
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
   clientUrl: process.env.CLIENT_URL ?? "*",
-  databaseUrl: requiredEnv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/anantkaal"),
-  jwtSecret: requiredEnv("JWT_SECRET", "dev-super-secret-change-me"),
+  databaseUrl: requireEnvInProduction(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/anantkaal",
+  ),
+  jwtSecret: requireEnvInProduction("JWT_SECRET", "dev-super-secret-change-me"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   geminiApiKey: process.env.GEMINI_API_KEY,
   geminiPrimaryModel: process.env.GEMINI_PRIMARY_MODEL ?? "gemini-2.5-flash",

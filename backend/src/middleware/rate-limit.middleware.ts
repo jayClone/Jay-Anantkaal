@@ -27,6 +27,7 @@ export const createRateLimitMiddleware = ({
 }: RateLimitOptions): RequestHandler => {
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
+    // Rate limits are scoped per route family plus user/ip so auth and AI traffic do not interfere.
     const key = `${keyPrefix}:${keySelector(req)}`;
     const current = rateLimitStore.get(key);
 

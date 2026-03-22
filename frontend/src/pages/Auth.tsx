@@ -192,10 +192,6 @@ export default function AuthPage({ mode }: AuthPageProps) {
 
       <div className="relative mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
         <section className="space-y-8">
-          <div className="inline-flex items-center gap-3 rounded-full border border-white/50 bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-primary shadow-sm backdrop-blur">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            Recruiter-ready workflow
-          </div>
 
           <div className="max-w-2xl space-y-5">
             <h1 className="font-headline text-5xl font-extrabold tracking-tight text-primary md:text-6xl">

@@ -14,7 +14,10 @@ export const errorMiddleware = (
     });
   }
 
+  const message =
+    process.env.NODE_ENV === "production" ? "Internal server error" : err.message || "Internal server error";
+
   return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-    message: err.message || "Internal server error",
+    message,
   });
 };

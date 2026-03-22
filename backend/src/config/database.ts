@@ -12,6 +12,7 @@ declare global {
   var __pgPool__: pg.Pool | undefined;
 }
 
+// Reuse the same pool/client during local rebuilds so Prisma does not open duplicate connections.
 const pool =
   global.__pgPool__ ??
   new Pool({
@@ -28,6 +29,7 @@ export const prisma =
   });
 
 if (process.env.NODE_ENV !== "production") {
+  // Keep instances cached across reloads in development only.
   global.__prisma__ = prisma;
   global.__pgPool__ = pool;
 }

@@ -47,15 +47,15 @@ TaskFlow is designed to cover the assignment requirements while adding a few pro
 
 ```text
 .
-├── backend
-│   ├── prisma
-│   ├── src
-│   ├── tests
-│   └── package.json
-├── frontend
-│   ├── src
-│   └── package.json
-└── README.md
+|-- backend
+|   |-- prisma
+|   |-- src
+|   |-- tests
+|   `-- package.json
+|-- frontend
+|   |-- src
+|   `-- package.json
+`-- README.md
 ```
 
 ## Features
@@ -228,6 +228,53 @@ The frontend runs on:
 ```text
 http://localhost:3000
 ```
+
+## Deployment
+
+### Live Applications
+
+- Frontend: `https://jay-anantkaal.vercel.app`
+- Backend: `https://jay-anantkaal.onrender.com`
+
+### Frontend Deployment
+
+The frontend is deployed on Vercel.
+
+- Root directory: `frontend`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+The Vercel deployment rewrites `/api/*` requests to the Render backend:
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://jay-anantkaal.onrender.com/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+```
+
+### Backend Deployment
+
+The backend is deployed on Render.
+
+- Root directory: `backend`
+- Build command: `npm install && npm run build`
+- Start command: `npm start`
+
+Render environment notes:
+
+- `CLIENT_URL` should point to the Vercel frontend origin
+- `PORT` should be provided by Render and does not need to be hardcoded
+- Prisma Client is generated during install/build for clean deploy environments
 
 ## Build Commands
 
@@ -402,6 +449,7 @@ This creates and stores a new guidance record. The frontend now reuses the most 
 ## Frontend Notes
 
 - API requests are sent to `/api` and proxied by Vite to `http://localhost:5000`
+- In production, `/api` is rewritten by Vercel to the Render backend
 - JWT is attached automatically through the Axios interceptor
 - Protected routes redirect unauthenticated users to `/login`
 - Google sign-in is rendered using Google Identity Services on the auth page

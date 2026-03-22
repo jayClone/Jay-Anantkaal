@@ -42,6 +42,18 @@ type GeminiGenerateResponse = {
   };
 };
 
+const requireOptionalString = (value: unknown, fieldName: string) => {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string") {
+    throw new AppError(`${fieldName} must be a string`, StatusCodes.BAD_REQUEST);
+  }
+
+  return value;
+};
+
 const taskStatusMap: Record<string, TaskStatus> = {
   todo: TaskStatus.TODO,
   "to do": TaskStatus.TODO,
@@ -75,6 +87,16 @@ const parseDueDate = (dueDate?: string | null) => {
 const validateTaskTitle = (title: string) => {
   if (!title.trim()) {
     throw new AppError("Task title is required", StatusCodes.BAD_REQUEST);
+  }
+
+  if (title.trim().length > 150) {
+    throw new AppError("Task title must be 150 characters or fewer", StatusCodes.BAD_REQUEST);
+  }
+};
+
+const validateTaskDescription = (description?: string) => {
+  if (description !== undefined && description.trim().length > 2000) {
+    throw new AppError("Task description must be 2000 characters or fewer", StatusCodes.BAD_REQUEST);
   }
 };
 
@@ -220,6 +242,7 @@ const generateGuidanceWithGemini = async (task: {
     return null;
   }
 
+  // Try the preferred model first, then step down only when Gemini rejects the request or quota is exhausted.
   const models = [env.geminiPrimaryModel, ...env.geminiFallbackModels].filter(
     (value, index, allValues) => value && allValues.indexOf(value) === index,
   );
@@ -285,16 +308,35 @@ const generateGuidanceWithGemini = async (task: {
 };
 
 export const taskService = {
+  /**
+   * Create a task for the authenticated user after validating title, optional
+   * description, and due date shape.
+   *
+   * @async
+   * @function createTask
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {CreateTaskInput} input - Task creation payload.
+   * @returns {Promise<object>} Newly created task including the latest guidance relation.
+   * @throws {AppError} Throws `400` for malformed fields such as empty titles or invalid dates.
+   */
   createTask: async (userId: string, input: CreateTaskInput) => {
-    validateTaskTitle(input.title);
+    const title = requireOptionalString(input.title, "Task title");
+    const description = requireOptionalString(input.description, "Task description");
+
+    if (title === undefined) {
+      throw new AppError("Task title is required", StatusCodes.BAD_REQUEST);
+    }
+
+    validateTaskTitle(title);
+    validateTaskDescription(description);
 
     const dueDate = parseDueDate(input.dueDate);
 
     return prisma.task.create({
       data: {
         userId,
-        title: input.title.trim(),
-        description: input.description?.trim() || null,
+        title: title.trim(),
+        description: description?.trim() || null,
         priority: input.priority ?? TaskPriority.MEDIUM,
         status: input.status ?? TaskStatus.TODO,
         ...(dueDate !== undefined ? { dueDate } : {}),
@@ -308,6 +350,16 @@ export const taskService = {
     });
   },
 
+  /**
+   * Retrieve the authenticated user's tasks, optionally filtered by status.
+   *
+   * @async
+   * @function getTasks
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {string | undefined} status - Optional human-readable status filter.
+   * @returns {Promise<object[]>} Task list ordered by newest first.
+   * @throws {AppError} Throws `400` when the provided status filter cannot be normalized.
+   */
   getTasks: async (userId: string, status?: string) => {
     const normalizedStatus = normalizeTaskStatus(status);
     const where: { userId: string; status?: TaskStatus } = { userId };
@@ -328,6 +380,18 @@ export const taskService = {
     });
   },
 
+  /**
+   * Update a task owned by the authenticated user after validating the provided
+   * fields and verifying ownership.
+   *
+   * @async
+   * @function updateTask
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {string} taskId - Unique identifier of the target task.
+   * @param {UpdateTaskInput} input - Task update payload.
+   * @returns {Promise<object>} Updated task including the latest guidance relation.
+   * @throws {AppError} Throws `400` for invalid field values and `404` when the task is not owned by the caller.
+   */
   updateTask: async (userId: string, taskId: string, input: UpdateTaskInput) => {
     const existingTask = await prisma.task.findFirst({
       where: { id: taskId, userId },
@@ -338,8 +402,11 @@ export const taskService = {
     }
 
     if (input.title !== undefined) {
-      validateTaskTitle(input.title);
+      validateTaskTitle(requireOptionalString(input.title, "Task title")!);
     }
+
+    const description = requireOptionalString(input.description, "Task description");
+    validateTaskDescription(description);
 
     const dueDate = parseDueDate(input.dueDate);
     const data: {
@@ -355,7 +422,7 @@ export const taskService = {
     }
 
     if (input.description !== undefined) {
-      data.description = input.description.trim() || null;
+      data.description = description?.trim() || null;
     }
 
     if (input.priority !== undefined) {
@@ -382,6 +449,16 @@ export const taskService = {
     });
   },
 
+  /**
+   * Delete a task owned by the authenticated user.
+   *
+   * @async
+   * @function deleteTask
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {string} taskId - Unique identifier of the target task.
+   * @returns {Promise<void>} Resolves when the task has been removed.
+   * @throws {AppError} Throws `404` when the task does not exist for the caller.
+   */
   deleteTask: async (userId: string, taskId: string) => {
     const existingTask = await prisma.task.findFirst({
       where: { id: taskId, userId },
@@ -396,6 +473,19 @@ export const taskService = {
     });
   },
 
+  /**
+   * Generate and persist task guidance for the authenticated user.
+   *
+   * Gemini is attempted first, then configured fallback models, and finally a deterministic
+   * local strategy when remote generation is unavailable.
+   *
+   * @async
+   * @function generateGuidance
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {string} taskId - Unique identifier of the target task.
+   * @returns {Promise<object>} Stored guidance record for the task.
+   * @throws {AppError} Throws `404` when the task does not exist for the caller.
+   */
   generateGuidance: async (userId: string, taskId: string) => {
     const task = await prisma.task.findFirst({
       where: { id: taskId, userId },

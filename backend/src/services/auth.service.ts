@@ -60,6 +60,14 @@ const buildAuthResponse = (user: User) => ({
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const normalizeUsername = (username: string) => username.trim().toLowerCase();
 
+const requireString = (value: unknown, fieldName: string) => {
+  if (typeof value !== "string") {
+    throw new AppError(`${fieldName} must be a string`, StatusCodes.BAD_REQUEST);
+  }
+
+  return value;
+};
+
 const ensureUsername = (username: string) => {
   const normalized = normalizeUsername(username);
 
@@ -73,9 +81,43 @@ const ensureUsername = (username: string) => {
   return normalized;
 };
 
+const validateName = (name: string) => {
+  if (!name.trim()) {
+    throw new AppError("Name is required", StatusCodes.BAD_REQUEST);
+  }
+
+  if (name.trim().length > 100) {
+    throw new AppError("Name must be 100 characters or fewer", StatusCodes.BAD_REQUEST);
+  }
+};
+
+const validateEmail = (email: string) => {
+  const normalized = normalizeEmail(email);
+
+  if (!normalized) {
+    throw new AppError("Email is required", StatusCodes.BAD_REQUEST);
+  }
+
+  if (normalized.length > 255) {
+    throw new AppError("Email must be 255 characters or fewer", StatusCodes.BAD_REQUEST);
+  }
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailPattern.test(normalized)) {
+    throw new AppError("Email must be a valid email address", StatusCodes.BAD_REQUEST);
+  }
+
+  return normalized;
+};
+
 const validatePassword = (password: string) => {
   if (password.trim().length < 8) {
     throw new AppError("Password must be at least 8 characters long", StatusCodes.BAD_REQUEST);
+  }
+
+  if (password.length > 128) {
+    throw new AppError("Password must be 128 characters or fewer", StatusCodes.BAD_REQUEST);
   }
 };
 
@@ -127,16 +169,25 @@ const fetchGoogleProfile = async (idToken: string): Promise<GoogleTokenInfo> => 
 };
 
 export const authService = {
+  /**
+   * Create a new local account after validating payload types, field constraints,
+   * uniqueness rules, and the local password policy.
+   *
+   * @async
+   * @function register
+   * @param {RegisterInput} input - Registration payload from the client.
+   * @returns {Promise<{token: string, user: ReturnType<typeof sanitizeUser>}>} Auth payload for the new user.
+   * @throws {AppError} Throws `400` for invalid field shapes or values and `409` for duplicate email/username.
+   */
   register: async (input: RegisterInput) => {
-    const email = normalizeEmail(input.email);
-    const username = ensureUsername(input.username);
-    const name = input.name?.trim() || input.username.trim();
+    const usernameInput = requireString(input.username, "Username");
+    const email = validateEmail(requireString(input.email, "Email"));
+    const username = ensureUsername(usernameInput);
+    const resolvedName =
+      input.name === undefined ? usernameInput.trim() : requireString(input.name, "Name").trim() || usernameInput.trim();
 
-    if (!name) {
-      throw new AppError("Name is required", StatusCodes.BAD_REQUEST);
-    }
-
-    validatePassword(input.password);
+    validateName(resolvedName);
+    validatePassword(requireString(input.password, "Password"));
 
     const [existingEmail, existingUsername] = await Promise.all([
       prisma.user.findUnique({
@@ -161,7 +212,7 @@ export const authService = {
       data: {
         username,
         email,
-        name,
+        name: resolvedName,
         passwordHash,
         provider: AuthProvider.LOCAL,
         lastLoginAt: new Date(),
@@ -171,8 +222,19 @@ export const authService = {
     return buildAuthResponse(user);
   },
 
+  /**
+   * Authenticate a local user with username/email and password after validating
+   * the credential payload shape.
+   *
+   * @async
+   * @function login
+   * @param {LoginInput} input - Login credentials from the client.
+   * @returns {Promise<{token: string, user: ReturnType<typeof sanitizeUser>}>} Auth payload for the user.
+   * @throws {AppError} Throws `400` for malformed input and `401` for invalid credentials.
+   */
   login: async (input: LoginInput) => {
-    const identifier = input.identifier.trim();
+    const identifier = requireString(input.identifier, "Email or username").trim();
+    const password = requireString(input.password, "Password");
 
     if (!identifier) {
       throw new AppError("Email or username is required", StatusCodes.BAD_REQUEST);
@@ -191,7 +253,7 @@ export const authService = {
       throw new AppError("Invalid email/username or password", StatusCodes.UNAUTHORIZED);
     }
 
-    const passwordMatches = await hashUtils.compare(input.password, user.passwordHash);
+    const passwordMatches = await hashUtils.compare(password, user.passwordHash);
 
     if (!passwordMatches) {
       throw new AppError("Invalid email/username or password", StatusCodes.UNAUTHORIZED);
@@ -205,12 +267,24 @@ export const authService = {
     return buildAuthResponse(updatedUser);
   },
 
+  /**
+   * Verify a Google ID token, then link or create a user record before returning
+   * an application JWT.
+   *
+   * @async
+   * @function authenticateWithGoogle
+   * @param {GoogleAuthInput} input - Payload containing the Google `idToken`.
+   * @returns {Promise<{token: string, user: ReturnType<typeof sanitizeUser>}>} Auth payload for the resolved user.
+   * @throws {AppError} Throws `400` for malformed input and `401` when Google token verification fails.
+   */
   authenticateWithGoogle: async (input: GoogleAuthInput) => {
-    if (!input.idToken?.trim()) {
+    const idToken = requireString(input.idToken, "Google id token").trim();
+
+    if (!idToken) {
       throw new AppError("Google id token is required", StatusCodes.BAD_REQUEST);
     }
 
-    const profile = await fetchGoogleProfile(input.idToken);
+    const profile = await fetchGoogleProfile(idToken);
     const email = normalizeEmail(profile.email);
 
     const user = await prisma.$transaction(async (tx) => {
@@ -230,7 +304,7 @@ export const authService = {
         await tx.oAuthAccount.update({
           where: { id: existingOauth.id },
           data: {
-            accessToken: input.idToken,
+            accessToken: idToken,
           },
         });
 
@@ -273,13 +347,13 @@ export const authService = {
           },
         },
         update: {
-          accessToken: input.idToken,
+          accessToken: idToken,
           userId: userRecord.id,
         },
         create: {
           provider: AuthProvider.GOOGLE,
           providerAccountId: profile.sub,
-          accessToken: input.idToken,
+          accessToken: idToken,
           userId: userRecord.id,
         },
       });
@@ -298,6 +372,14 @@ export const authService = {
     return buildAuthResponse(user);
   },
 
+  /**
+   * Fetch the sanitized profile for the authenticated user.
+   *
+   * @async
+   * @function getProfile
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @returns {Promise<ReturnType<typeof sanitizeUser>>} Sanitized user profile.
+   */
   getProfile: async (userId: string) => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -310,6 +392,21 @@ export const authService = {
     return sanitizeUser(user);
   },
 
+  /**
+   * Create or update the caller's local password.
+   *
+   * For OAuth users without a stored password hash, `currentPassword` is optional and
+   * this operation behaves like first-time password creation. For users who already
+   * have a local password, the current password must be supplied and verified before
+   * the new password hash is persisted.
+   *
+   * @async
+   * @function changePassword
+   * @param {string} userId - Unique identifier of the authenticated user.
+   * @param {ChangePasswordInput} input - Password update payload.
+   * @returns {Promise<{message: string}>} Success message describing the outcome.
+   * @throws {AppError} Throws `400` for invalid payloads, `401` for incorrect current passwords, and `404` when the user no longer exists.
+   */
   changePassword: async (userId: string, input: ChangePasswordInput) => {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -319,28 +416,31 @@ export const authService = {
       throw new AppError("User not found", StatusCodes.NOT_FOUND);
     }
 
-    validatePassword(input.newPassword);
+    const newPassword = requireString(input.newPassword, "New password");
+    validatePassword(newPassword);
 
     if (user.passwordHash) {
-      if (!input.currentPassword?.trim()) {
+      const currentPassword = requireString(input.currentPassword, "Current password").trim();
+
+      if (!currentPassword) {
         throw new AppError("Current password is required", StatusCodes.BAD_REQUEST);
       }
 
-      const passwordMatches = await hashUtils.compare(input.currentPassword, user.passwordHash);
+      const passwordMatches = await hashUtils.compare(currentPassword, user.passwordHash);
 
       if (!passwordMatches) {
         throw new AppError("Current password is incorrect", StatusCodes.UNAUTHORIZED);
       }
     }
 
-    if (input.currentPassword && input.currentPassword === input.newPassword) {
+    if (typeof input.currentPassword === "string" && input.currentPassword === newPassword) {
       throw new AppError(
         "New password must be different from your current password",
         StatusCodes.BAD_REQUEST,
       );
     }
 
-    const passwordHash = await hashUtils.hash(input.newPassword);
+    const passwordHash = await hashUtils.hash(newPassword);
 
     await prisma.user.update({
       where: { id: userId },
